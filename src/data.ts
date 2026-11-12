@@ -61,11 +61,19 @@ export async function refund(id: string, role: Role, reason: string, explanation
   const request = transactionStore.get(id)
   let validationError = ''
   request.onsuccess = () => {
-    const payment = request.result as Transaction | undefined
-    if (!payment || payment.status !== 'Paid') { validationError = 'This payment is no longer eligible for a refund.'; tx.abort(); return }
-    const time = new Date().toISOString()
-    transactionStore.put({ ...payment, status: 'Refunded', refundedAt: time, refundedAmount: payment.amount, reason, explanation: reason === 'Other' ? explanation.trim() : '', role })
-    tx.objectStore('activities').add({ id: crypto.randomUUID(), time, role, action: 'Test refund', transactionId: id, amount: payment.amount, reason: reason === 'Other' ? `${reason}: ${explanation.trim()}` : reason } satisfies Activity)
+    try {
+      const payment = request.result as Transaction | undefined
+      if (!payment || payment.status !== 'Paid') { validationError = 'This payment is no longer eligible for a refund.'; tx.abort(); return }
+      const time = new Date().toISOString()
+      const activityId = typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
+      transactionStore.put({ ...payment, status: 'Refunded', refundedAt: time, refundedAmount: payment.amount, reason, explanation: reason === 'Other' ? explanation.trim() : '', role })
+      tx.objectStore('activities').add({ id: activityId, time, role, action: 'Test refund', transactionId: id, amount: payment.amount, reason: reason === 'Other' ? `${reason}: ${explanation.trim()}` : reason } satisfies Activity)
+    } catch {
+      validationError = 'Refund failed. Please try again.'
+      tx.abort()
+    }
   }
   try { await completed(tx) } catch (error) { throw new Error(validationError || (error instanceof Error ? error.message : 'Refund failed.'), { cause: error }) }
 }

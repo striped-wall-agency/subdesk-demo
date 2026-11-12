@@ -3,6 +3,21 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { getData, refund, resetDemo } from '../src/data.ts'
 
+test('refund works when randomUUID is unavailable on local network HTTP', async () => {
+  await resetDemo()
+  const original = crypto.randomUUID
+  crypto.randomUUID = undefined
+  try {
+    await refund('txn_1001', 'Admin', 'Other', 'Test')
+    const data = await getData()
+    assert.equal(data.transactions.find(t => t.id === 'txn_1001').status, 'Refunded')
+    assert.equal(data.activities.length, 1)
+  } finally {
+    crypto.randomUUID = original
+    await resetDemo()
+  }
+})
+
 test('refund rules, concurrency, persistence and reset', async () => {
   await resetDemo()
   const initial = await getData()
