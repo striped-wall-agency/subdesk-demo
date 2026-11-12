@@ -1,122 +1,58 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { HashRouter, Link, NavLink, Route, Routes, useParams } from 'react-router-dom'
+import { getData, refund, resetDemo, type Data, type Role, type Transaction } from './data'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n / 100)
+const day = (s: string) => s.slice(0, 10)
+const utc = (s: string) => s.replace('T', ' ').slice(0, 19) + ' UTC'
+const nav = [['/', 'Overview'], ['/customers', 'Customers'], ['/subscriptions', 'Subscriptions'], ['/transactions', 'Transactions'], ['/issues', 'Payment issues'], ['/activity', 'Activity log']]
+function Status({ value }: { value: string }) { return <span className={'status ' + value.toLowerCase().replace(' ', '-')}>{value}</span> }
+function Heading({ title, description, children }: { title: string; description: string; children?: ReactNode }) { return <header className="heading"><div><span className="eyebrow">SUBDESK / WORKSPACE</span><h1>{title}<span className="lime">.</span></h1><p>{description}</p></div>{children}</header> }
+function Table({ headers, children }: { headers: string[]; children: ReactNode }) { return <div className="table-wrap"><table><thead><tr>{headers.map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div> }
+function Empty({ text = 'No results found.' }: { text?: string }) { return <p className="empty">{text}</p> }
+function Dialog({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(close)
+  useEffect(() => { closeRef.current = close }, [close])
+  useEffect(() => { const before = document.activeElement as HTMLElement; const box = ref.current; box?.querySelector<HTMLElement>('button,select,input,textarea')?.focus(); const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); if (e.key !== 'Tab' || !box) return; const items = Array.from(box.querySelectorAll<HTMLElement>('button:not(:disabled),select:not(:disabled),input:not(:disabled),textarea:not(:disabled)')); if (!items.length) return; if (e.shiftKey && document.activeElement === items[0]) { e.preventDefault(); items[items.length - 1].focus() } else if (!e.shiftKey && document.activeElement === items[items.length - 1]) { e.preventDefault(); items[0].focus() } }; document.addEventListener('keydown', handler); return () => { document.removeEventListener('keydown', handler); before?.focus() } }, [])
+  return <div className="overlay"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" ref={ref}><h2 id="dialog-title">{title}</h2>{children}</div></div>
 }
-
+function App() {
+  const [role, setRole] = useState<Role | null>(null), [chosen, setChosen] = useState<Role>('Support')
+  const [data, setData] = useState<Data | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [modal, setModal] = useState<'reset' | 'refund' | 'success' | null>(null), [selected, setSelected] = useState<Transaction | null>(null), [reason, setReason] = useState(''), [explanation, setExplanation] = useState(''), [menu, setMenu] = useState(false)
+  const load = async () => { try { setData(await getData()); setError('') } catch { setError('Could not read demo data. Please try again.') } }
+  useEffect(() => { getData().then(setData).catch(() => setError('Could not read demo data. Please try again.')) }, [])
+  const close = () => { if (!busy) { setModal(null); setError('') } }
+  const doReset = async () => { setBusy(true); try { await resetDemo(); await load(); setModal(null) } catch { setError('Reset failed. Please try again.') } finally { setBusy(false) } }
+  const doRefund = async () => { if (!selected || !role) return; setBusy(true); setError(''); try { await refund(selected.id, role, reason, explanation); await load(); setModal('success') } catch (e) { setError(e instanceof Error ? e.message : 'Refund failed.') } finally { setBusy(false) } }
+  if (!role) return <main className="entry"><section className="entry-brand"><div className="brand"><span>✳</span> subdesk<span>.</span></div><div><span className="eyebrow">A STRIPED WALL PROJECT</span><h1>Support, with<br/><em>clarity.</em></h1><p>A thoughtful workspace for the moments that matter.</p></div><small>© 2026 Striped Wall · Portfolio demo</small></section><section className="entry-form"><div><span className="eyebrow">WELCOME TO SUBDESK</span><h1>Explore the demo<span className="lime">.</span></h1><p>Choose a role to see how your team works together.</p><div className="demo-note"><strong>Demo mode</strong><br/>All data is fictional. No real payments are processed.</div>{(['Support', 'Admin'] as Role[]).map(r => <label className={'role-option ' + (chosen === r ? 'selected' : '')} key={r}><input type="radio" name="role" checked={chosen === r} onChange={() => setChosen(r)}/><span><strong>{r}</strong><small>{r === 'Support' ? 'View customers, subscriptions and payments.' : 'All support access, plus issue test refunds.'}</small></span></label>)}<button className="primary wide" onClick={() => setRole(chosen)}>Enter demo ↗</button><p className="muted small">No password needed. Roles are for demonstration only.</p></div></section></main>
+  if (!data) return <div className="loading">{error ? <><p role="alert">{error}</p><button onClick={() => void load()}>Try again</button></> : 'Loading demo…'}</div>
+  return <HashRouter><div className="app"><aside className={'sidebar ' + (menu ? 'open' : '')}><div className="brand"><span>✳</span> subdesk<span>.</span></div><div className="workspace-label">WORKSPACE <span>DEMO</span></div><nav aria-label="Main navigation">{nav.map(([path, name], i) => <NavLink key={path} to={path} end={path === '/'} onClick={() => setMenu(false)}><span className="nav-icon">{['◫', '◉', '▤', '↗', '△', '◷'][i]}</span>{name}</NavLink>)}</nav><div className="side-bottom"><button onClick={() => { setError(''); setModal('reset') }}>↺ &nbsp; Reset demo</button><div className="profile"><div className="avatar">{role[0]}</div><div><strong>{role} view</strong><small>Demo workspace</small></div><button onClick={() => setRole(null)} aria-label="Switch role">↗</button></div></div></aside><div className="content"><header className="topbar"><button className="menu-button" onClick={() => setMenu(!menu)} aria-label="Toggle navigation">☰</button><span>STRIPED WALL &nbsp; / &nbsp; <strong>SUBDESK</strong></span><span className="demo-pill">● &nbsp; Demo mode</span></header><main className="main"><Routes>
+  <Route path="/" element={<Overview data={data}/>}/><Route path="/customers" element={<Customers data={data}/>}/><Route path="/customers/:id" element={<CustomerDetail data={data}/>}/><Route path="/subscriptions" element={<Subscriptions data={data}/>}/><Route path="/transactions" element={<Transactions data={data}/>}/><Route path="/transactions/:id" element={<TransactionDetail data={data} role={role} onRefund={t => { setSelected(t); setReason(''); setExplanation(''); setError(''); setModal('refund') }}/>}/><Route path="/issues" element={<Issues data={data}/>}/><Route path="/activity" element={<Activity data={data}/>}/><Route path="*" element={<NotFound/>}/>
+  </Routes></main></div></div>
+  {modal === 'reset' && <Dialog title="Reset demo data?" close={close}><p>This restores the original demo data, removes local refunds and clears the activity log in this browser. This cannot be undone.</p>{error && <p className="error" role="alert">{error}</p>}<div className="dialog-actions"><button className="secondary" onClick={close}>Cancel</button><button className="danger" disabled={busy} onClick={() => void doReset()}>{busy ? 'Resetting…' : 'Reset demo'}</button></div></Dialog>}
+  {modal === 'refund' && selected && <Dialog title="Issue a test refund" close={close}><p>This is a demo operation. No real money will move.</p><div className="refund-amount"><span>Full refund amount</span><strong>{money(selected.amount)}</strong></div><label className="field">Reason <select value={reason} onChange={e => setReason(e.target.value)}><option value="">Select a reason</option><option>QA refund</option><option>Other</option></select></label>{reason === 'Other' && <label className="field">Explanation <textarea value={explanation} onChange={e => setExplanation(e.target.value)}/></label>}{error && <p className="error" role="alert">{error}</p>}<div className="dialog-actions"><button className="secondary" onClick={close}>Cancel</button><button className="primary" disabled={busy} onClick={() => void doRefund()}>{busy ? 'Processing…' : 'Confirm test refund'}</button></div></Dialog>}
+  {modal === 'success' && <Dialog title="Test refund complete" close={close}><p>The full test refund has been recorded. The subscription remains unchanged.</p><div className="dialog-actions"><button className="primary" onClick={close}>Done</button></div></Dialog>}
+  </HashRouter>
+}
+function CustomerLink({ data, id }: { data: Data; id: string }) { return <Link to={'/customers/' + id}>{data.customers.find(c => c.id === id)?.name ?? id}</Link> }
+function Payments({ data, rows }: { data: Data; rows: Transaction[] }) { return rows.length ? <Table headers={['Transaction', 'Customer', 'Date', 'Amount', 'Status', '']} >{rows.map(t => <tr key={t.id}><td className="mono"><Link to={'/transactions/' + t.id}>{t.id}</Link></td><td><CustomerLink data={data} id={t.customerId}/></td><td>{day(t.date)}</td><td>{money(t.amount)}</td><td><Status value={t.status}/></td><td><Link to={'/transactions/' + t.id} aria-label={'View ' + t.id}>↗</Link></td></tr>)}</Table> : <Empty/> }
+function Overview({ data }: { data: Data }) {
+  const [from, setFrom] = useState(''), [to, setTo] = useState('')
+  const within = (s: string) => (!from || day(s) >= from) && (!to || day(s) <= to)
+  const collected = data.transactions.filter(t => t.status !== 'Failed' && within(t.date)), refunded = data.transactions.filter(t => t.refundedAt && within(t.refundedAt)), failed = data.transactions.filter(t => t.status === 'Failed' && within(t.date))
+  const days = Object.entries(collected.reduce<Record<string, number>>((a, t) => { const d = day(t.date); a[d] = (a[d] || 0) + t.amount; return a }, {})).sort(([a], [b]) => a.localeCompare(b)), max = Math.max(1, ...days.map(([, n]) => n))
+  return <><Heading title="Overview" description="A clear view of your business, at a glance."><div className="date-range"><label>From <input type="date" value={from} onChange={e => setFrom(e.target.value)}/></label><label>To <input type="date" value={to} onChange={e => setTo(e.target.value)}/></label></div></Heading><div className="metrics">{[['Active subscriptions', String(data.subscriptions.filter(s => s.status === 'Active').length), 'Current total'], ['Payments collected', money(collected.reduce((a, t) => a + t.amount, 0)), 'Before refunds'], ['Refunded', money(refunded.reduce((a, t) => a + (t.refundedAmount || 0), 0)), 'By refund date'], ['Failed payments', String(failed.length), 'By attempt date']].map(([title, value, note]) => <div className="metric" key={title}><span>{title}</span><strong>{value}</strong><small>{note}</small></div>)}</div><div className="section-head"><h2>Collected over time</h2><span>USD · by day</span></div>{days.length ? <div className="chart" aria-label="Collected by day">{days.map(([d, n]) => <div className="bar-item" key={d}><span>{money(n)}</span><div className="bar" style={{ height: `${Math.max(8, n / max * 140)}px` }}/><small>{d.slice(5)}</small></div>)}</div> : <Empty text="No collected payments in this period."/>}<div className="two-columns"><section><div className="section-head"><h2>Payment issues</h2><Link to="/issues">View all ↗</Link></div><Payments data={data} rows={data.transactions.filter(t => t.status === 'Failed')}/></section><section><div className="section-head"><h2>Latest activity</h2><Link to="/activity">View all ↗</Link></div>{data.activities.length ? data.activities.slice().reverse().slice(0, 5).map(a => <div className="activity-line" key={a.id}><strong>{a.action}</strong><span>{utc(a.time)}</span></div>) : <Empty text="No activity yet."/>}</section></div></>
+}
+function PlanFilter({ value, set }: { value: string; set: (s: string) => void }) { return <select aria-label="Plan" value={value} onChange={e => set(e.target.value)}><option value="">All plans</option><option>Starter</option><option>Studio</option><option>Scale</option></select> }
+function Customers({ data }: { data: Data }) { const [q, setQ] = useState(''), [status, setStatus] = useState(''), [plan, setPlan] = useState(''); const rows = data.customers.filter(c => (c.name + c.email).toLowerCase().includes(q.toLowerCase()) && (!status || c.accountStatus === status) && (!plan || data.subscriptions.find(s => s.customerId === c.id)?.plan === plan)); return <><Heading title="Customers" description="The people behind your business."/><div className="filters"><input aria-label="Search customers" placeholder="Search name or email" value={q} onChange={e => setQ(e.target.value)}/><select aria-label="Account status" value={status} onChange={e => setStatus(e.target.value)}><option value="">All account statuses</option><option>Active</option><option>Inactive</option></select><PlanFilter value={plan} set={setPlan}/></div>{rows.length ? <Table headers={['Customer', 'Company', 'Plan', 'Account status', 'Joined', '']}>{rows.map(c => <tr key={c.id}><td><Link to={'/customers/' + c.id}><strong>{c.name}</strong></Link><small>{c.email}</small></td><td>{c.company}</td><td>{data.subscriptions.find(s => s.customerId === c.id)?.plan}</td><td><Status value={c.accountStatus}/></td><td>{day(c.joinedAt)}</td><td><Link aria-label={'View ' + c.name} to={'/customers/' + c.id}>↗</Link></td></tr>)}</Table> : <Empty/>}</> }
+function Subscriptions({ data }: { data: Data }) { const [q, setQ] = useState(''), [status, setStatus] = useState(''), [plan, setPlan] = useState(''); const rows = data.subscriptions.filter(s => { const c = data.customers.find(x => x.id === s.customerId); return ((c?.name || '') + (c?.email || '')).toLowerCase().includes(q.toLowerCase()) && (!status || s.status === status) && (!plan || s.plan === plan) }); return <><Heading title="Subscriptions" description="Keep track of every plan."/><div className="filters"><input aria-label="Search subscriptions" placeholder="Search customer or email" value={q} onChange={e => setQ(e.target.value)}/><select aria-label="Subscription status" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option>Active</option><option>Past due</option><option>Canceled</option></select><PlanFilter value={plan} set={setPlan}/></div>{rows.length ? <Table headers={['Customer', 'Plan', 'Price', 'Status', 'Next renewal', '']}>{rows.map(s => <tr key={s.id}><td><CustomerLink data={data} id={s.customerId}/></td><td>{s.plan}</td><td>{money(s.price)}</td><td><Status value={s.status}/></td><td>{day(s.nextRenewal)}</td><td><Link aria-label="View customer" to={'/customers/' + s.customerId}>↗</Link></td></tr>)}</Table> : <Empty/>}</> }
+function Transactions({ data }: { data: Data }) { const [q, setQ] = useState(''), [status, setStatus] = useState(''), [from, setFrom] = useState(''), [to, setTo] = useState(''), [min, setMin] = useState(''), [max, setMax] = useState(''); const rows = data.transactions.filter(t => { const c = data.customers.find(x => x.id === t.customerId); return (t.id + (c?.name || '') + (c?.email || '')).toLowerCase().includes(q.toLowerCase()) && (!status || t.status === status) && (!from || day(t.date) >= from) && (!to || day(t.date) <= to) && (!min || t.amount >= Number(min) * 100) && (!max || t.amount <= Number(max) * 100) }); return <><Heading title="Transactions" description="Every payment, in one place."/><div className="filters"><input aria-label="Search transactions" placeholder="Search customer or ID" value={q} onChange={e => setQ(e.target.value)}/><select aria-label="Payment status" value={status} onChange={e => setStatus(e.target.value)}><option value="">All statuses</option><option>Paid</option><option>Failed</option><option>Refunded</option></select><label>From <input type="date" value={from} onChange={e => setFrom(e.target.value)}/></label><label>To <input type="date" value={to} onChange={e => setTo(e.target.value)}/></label><input type="number" min="0" placeholder="Min USD" aria-label="Minimum USD" value={min} onChange={e => setMin(e.target.value)}/><input type="number" min="0" placeholder="Max USD" aria-label="Maximum USD" value={max} onChange={e => setMax(e.target.value)}/></div><Payments data={data} rows={rows}/></> }
+function Issues({ data }: { data: Data }) { const rows = data.transactions.filter(t => t.status === 'Failed'); return <><Heading title="Payment issues" description="Failed payments and their reasons."/>{rows.length ? <Table headers={['Transaction', 'Customer', 'Date', 'Amount', 'Reason', '']}>{rows.map(t => <tr key={t.id}><td className="mono"><Link to={'/transactions/' + t.id}>{t.id}</Link></td><td><CustomerLink data={data} id={t.customerId}/></td><td>{day(t.date)}</td><td>{money(t.amount)}</td><td><span className="status failed">{t.failure?.replaceAll('_', ' ')}</span></td><td><Link aria-label={'View ' + t.id} to={'/transactions/' + t.id}>↗</Link></td></tr>)}</Table> : <Empty text="No payment issues."/>}</> }
+function Activity({ data }: { data: Data }) { return <><Heading title="Activity log" description="A record of actions in this demo."/>{data.activities.length ? <Table headers={['Time (UTC)', 'Role', 'Action', 'Transaction', 'Amount', 'Reason']}>{data.activities.slice().reverse().map(a => <tr key={a.id}><td>{utc(a.time)}</td><td>{a.role}</td><td>{a.action}</td><td className="mono"><Link to={'/transactions/' + a.transactionId}>{a.transactionId}</Link></td><td>{money(a.amount)}</td><td>{a.reason}</td></tr>)}</Table> : <Empty text="No activity yet."/>}</> }
+function Info({ label, value }: { label: string; value: string }) { return <div className="info"><span>{label}</span><strong>{value}</strong></div> }
+function CustomerDetail({ data }: { data: Data }) { const { id } = useParams(); const c = data.customers.find(x => x.id === id); if (!c) return <NotFound/>; const s = data.subscriptions.find(x => x.customerId === id), events = data.activities.filter(a => data.transactions.some(t => t.id === a.transactionId && t.customerId === id)); return <><Link className="back" to="/customers">← All customers</Link><Heading title={c.name} description={c.email}/><div className="detail-grid"><section><div className="section-head"><h2>Payments</h2></div><Payments data={data} rows={data.transactions.filter(t => t.customerId === id)}/><div className="section-head"><h2>Activity</h2></div>{events.length ? events.map(a => <div className="activity-line" key={a.id}><strong>{a.action} · {money(a.amount)}</strong><span>{utc(a.time)}</span></div>) : <Empty text="No activity yet."/>}</section><aside className="context"><h2>Customer details</h2><Info label="Customer ID" value={c.id}/><Info label="Company" value={c.company}/><Info label="Email" value={c.email}/><Info label="Joined" value={day(c.joinedAt)}/><Info label="Account status" value={c.accountStatus}/><h2>Current subscription</h2>{s ? <><Info label="Plan" value={s.plan}/><Info label="Price" value={money(s.price)}/><Info label="Status" value={s.status}/><Info label="Next renewal" value={day(s.nextRenewal)}/></> : <p>None</p>}</aside></div></> }
+function TransactionDetail({ data, role, onRefund }: { data: Data; role: Role; onRefund: (t: Transaction) => void }) { const { id } = useParams(); const t = data.transactions.find(x => x.id === id); if (!t) return <NotFound/>; const s = data.subscriptions.find(x => x.id === t.subscriptionId); return <><Link className="back" to="/transactions">← All transactions</Link><Heading title={money(t.amount)} description={t.id}>{role === 'Admin' && t.status === 'Paid' && <button className="primary" onClick={() => onRefund(t)}>Issue test refund ↗</button>}</Heading><div className="detail-grid"><section><div className="section-head"><h2>Payment details</h2><Status value={t.status}/></div><Info label="Amount" value={money(t.amount)}/><Info label="Payment method" value={t.method}/><Info label="Payment date" value={utc(t.date)}/><Info label="Available to refund" value={money(t.status === 'Paid' ? t.amount : 0)}/>{t.failure && <Info label="Failure reason" value={t.failure.replaceAll('_', ' ')}/>}<div className="section-head"><h2>History</h2></div><div className="activity-line"><strong>{t.status === 'Failed' ? 'Payment failed' : 'Payment collected'}</strong><span>{utc(t.date)}</span></div>{t.refundedAt && <div className="activity-line"><strong>Test refund · {money(t.refundedAmount || 0)}</strong><span>{utc(t.refundedAt)} · {t.role} · {t.reason}{t.explanation ? `: ${t.explanation}` : ''}</span></div>}</section><aside className="context"><h2>Customer</h2><CustomerLink data={data} id={t.customerId}/><h2>Subscription</h2><Info label="ID" value={t.subscriptionId}/><Info label="Plan" value={s?.plan || '—'}/><Info label="Status" value={s?.status || '—'}/></aside></div></> }
+function NotFound() { return <><Heading title="Page not found" description="We couldn't find what you were looking for."/><Link to="/">Back to overview →</Link></> }
 export default App
